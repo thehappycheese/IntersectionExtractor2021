@@ -1,0 +1,6 @@
+/data.gdb
+*.mxd
+/output
+/old_outputs
+*.pyc
+/__pycache__
