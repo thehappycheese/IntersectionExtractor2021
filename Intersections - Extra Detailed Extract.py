@@ -31,7 +31,7 @@ It loops over every state road
 
 
 
-Finally each row has information on the 'continuing node' or the node you would get to if you followed the intersecting road all the way to its far end.
+Each row has information on the 'continuing node' or the node you would get to if you followed the intersecting road all the way to its far end.
 
 	- primary road
 		- road number
@@ -58,7 +58,8 @@ Finally each row has information on the 'continuing node' or the node you would 
 		- continuing roads (other roads leading away from this node, not including the intersecting road reffered to by this row, and not including any other intersecting road which connects back to the primary road
 		  listed in a single field with the format '<ROAD_NO> - <ROAD NAME> ; <ROAD_NO> - <ROAD NAME> ; ...'
 		 
-
+The final step of this script performs a complex aggregation to remove redundant rows;
+The initial output contains a separate row for each combination of primaray road CWAY and intersecting road CWAY. If a dual carriageway intersects a dual carriageway this would end up producing many rows at the same node.
 
 
 
@@ -77,13 +78,13 @@ data.gdb includes informaiton extracted from the RIME Spatial Server
 		OBJECTID	ROAD	ROAD_NAME	COMMON_USAGE_NAME	START_SLK	END_SLK	CWY	START_TRUE_DIST	END_TRUE_DIST	NETWORK_TYPE	RA_NO	RA_NAME	LG_NO	LG_NAME	START_NODE_NO	START_NODE_NAME	END_NODE_NO	END_NODE_NAME	DATUM_NE_ID	NM_BEGIN_MP	NM_END_MP	NETWORK_ELEMENT	ROUTE_NE_ID	GEOLOC_STLength__
 
 General Notes about the Code blow
-	in the code below a "segment" refers to a piece of a road between two nodes; ie one row of the RIME_Spatial.RIME.NTWK_IRIS_Road_Network
-	in formal graph math i suppose this should be called an "edge"
-	'Nodes' may not be intersections in the graph; they can happen in the middle of a road, or where a road changes from single to dual carriageway
-	for this reason we need to refer to the RIME_Spatial.RIME.NTWK_Intersections table; this tells us where the actual intersections are so that we can ignore the others
+	- in the code below a "segment" refers to a piece of a road between two nodes; ie one row of the RIME_Spatial.RIME.NTWK_IRIS_Road_Network
+		-- in formal graph math i suppose this should be called an "edge"
+	- 'Nodes' may not be intersections in the graph; they can happen in the middle of a road, or where a road changes from single to dual carriageway
+	  for this reason we need to refer to the RIME_Spatial.RIME.NTWK_Intersections table; this tells us where the actual intersections are so that we can ignore the others
 	
-	In an earlier version this extracted OBJECTID... it turns out this is useless. ArcGIS changes that whenever it feels like it. Not usefull as a unique reference.
-	This version uses the "NETWORK_ELEMENT" field
+	- In an earlier version this extracted OBJECTID... it turns out this is useless. ArcGIS changes that whenever it feels like it. Not usefull as a unique reference.
+	  This version uses the "NETWORK_ELEMENT" field
 
 """
 
@@ -141,7 +142,10 @@ list_of_state_road_numbers = ['H036', "H016"]
 
 
 def direction_of_node(row: gpd.GeoSeries, start_end: str = "START"):
-	""":return: radians"""
+	"""
+	:param row: represents a multi-polyline 'network element'
+	:param start_end: tells the function to find the direction at the start or end of the line
+	:returns: radians"""
 	a: Vector2 = Vector2()
 	b: Vector2 = Vector2()
 	c: Vector2 = Vector2()
