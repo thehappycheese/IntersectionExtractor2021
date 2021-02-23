@@ -1,93 +1,3 @@
-"""
-Nicholas Archer 2020-04-16
-
-This script extracts a list of intersections along each state road.
-It is similar to the 'intersections' extract from IRIS Reporting Center, but extracts more information
-
-It loops over every state road
-	└┬─then over every node on that road
-	 └───then over each row (network element) in the road database also touching that node (exclusing network elements forming part of the primary state road that we are busy looping over)
-			Then it outputs a row
-			sometimes if the primary road is dual carriageway, it will share 1 node for both carriageways
-			sometimes there will be a node for each carriageway
-			see diagram below which shows two of the many possible ways intersections can work, resulting in 3 output rows.
-
-
-        >==== contining road A =====(CONTINUING NODE)===== continuing road A ===>                  (CONTINUING NODE)
-                                      ||                                                            ||
-                                      (output row 1)                                                (output row 3)
-                                      ||                                                            ||
-                                      (NODE) (* intermediate nodes not captured)                    ||
-                                      ||                                                            ||
-                                      ||                                                            ||
->===== primary road H001 (L) ========= ========================================================== (NODE) ======================================>
-                                    (NODE)
->===== primary road H001 (R) ========= ========================================================== (NODE) ======================================>
-                                      ||
-                                      ||
-                                      (output row2)
-                                      ||
-        <== contining road B =====(CONTINUING NODE)===== continuing road C ==>
-
-
-
-Each row has information on the 'continuing node' or the node you would get to if you followed the intersecting road all the way to its far end.
-
-	- primary road
-		- road number
-		- road slk
-		- carriageway (L, R, LR, LRS, S) where LR means 'both' and 'LRS' occurs where the primary road changes from dual cway to single cway at the same node as the intersection
-		- direction of primary road
-		
-	- intersecting road
-		- intersecting road no
-		- cardinal direction
-		- intersecting carriageway (L, R, LR, S)
-		- direction relative to the primary road in degrees
-		- direction realative to the primary road (L, R) (for convienience; can be computed from the relative degrees)
-		- length # TODO: note this is currently the total for the whole of the intersecting road, not as it should be; from the intersection with the primary road to the relevant start node / end node.
-		- number of segments  # TODO: note this is currently the total for the whole of the intersecting road, not as it should be; from the intersection with the primary road to the relevant start node / end node
-		- a guess if this is an ON RAMP or OFF RAMP
-		  note that ramp direction is guessed based on the direction of increasing SLK of the intersecting road.
-		  ie; the leach highway onramp, may be lablled as an offramp for output rows where the primary road is albany highway
-		
-	- continuing node
-	  (node at the furthest extent of intersecting road, either the start node or end node of the intersecting road)
-	  (this is useful for determining what road a freeway ramp connects to. It is a bit non-sensical to read this informaiton for most intersections on albany highway)
-		- node number
-		- continuing roads (other roads leading away from this node, not including the intersecting road reffered to by this row, and not including any other intersecting road which connects back to the primary road
-		  listed in a single field with the format '<ROAD_NO> - <ROAD NAME> ; <ROAD_NO> - <ROAD NAME> ; ...'
-		 
-The final step of this script performs a complex aggregation to remove redundant rows;
-The initial output contains a separate row for each combination of primaray road CWAY and intersecting road CWAY. If a dual carriageway intersects a dual carriageway this would end up producing many rows at the same node.
-
-
-
-The extraction contains a lot of redundant rows because it outputs a row for each carriageway of each road, and each carriageway of each intersecting road
-
-data.gdb includes informaiton extracted from the RIME Spatial Server
-
-	NTWK_Intersections_20200424
-		(coppied from RIME_Spatial.RIME.NTWK_Intersections)
-		(one point feature per row per intersection)
-		OBJECTID NODE_NAME	NODE_DESCR NODE_TYPE	NO_NODE_ID
-
-	NTWK_IRIS_Road_Network_20200424
-		(coppied from RIME_Spatial.RIME.NTWK_IRIS_Road_Network)
-		(each road is in multiple rows, where each row is a multi-polyline feature. Although Multi-Polylines are )
-		OBJECTID	ROAD	ROAD_NAME	COMMON_USAGE_NAME	START_SLK	END_SLK	CWY	START_TRUE_DIST	END_TRUE_DIST	NETWORK_TYPE	RA_NO	RA_NAME	LG_NO	LG_NAME	START_NODE_NO	START_NODE_NAME	END_NODE_NO	END_NODE_NAME	DATUM_NE_ID	NM_BEGIN_MP	NM_END_MP	NETWORK_ELEMENT	ROUTE_NE_ID	GEOLOC_STLength__
-
-General Notes about the Code blow
-	- in the code below a "segment" refers to a piece of a road between two nodes; ie one row of the RIME_Spatial.RIME.NTWK_IRIS_Road_Network
-		-- in formal graph math i suppose this should be called an "edge"
-	- 'Nodes' may not be intersections in the graph; they can happen in the middle of a road, or where a road changes from single to dual carriageway
-	  for this reason we need to refer to the RIME_Spatial.RIME.NTWK_Intersections table; this tells us where the actual intersections are so that we can ignore the others
-	
-	- In an earlier version this extracted OBJECTID... it turns out this is useless. ArcGIS changes that whenever it feels like it. Not usefull as a unique reference.
-	  This version uses the "NETWORK_ELEMENT" field
-
-"""
-
 from typing import List, Dict, Any
 import pandas as pd
 import geopandas as gpd
@@ -100,45 +10,49 @@ from Geometry import Vector2
 
 import numpy as np
 
-# container for output of our algoritim
+# container for output of our algorithm
 output: List[Dict[str, Any]] = []
 
 ###############################
 # LOAD ROAD LINE FEATURES
 df_all_roads: gpd.geodataframe.GeoDataFrame = gpd.read_file("data.gdb", layer="NTWK_IRIS_Road_Network_20200424")
-df_state_roads: gpd.geodataframe.GeoDataFrame = df_all_roads[df_all_roads["ROAD"].str.startswith(("H", "M"), na=False)]
-# TODO: previously we would filter the intersectinos here to only show "State Road Node"s but i think that may have been the cause of missing so many.
-#  Revmoving that filter has caused big drop in speed.
+
 
 ###############################
 # LOAD ROAD INTERSECTION FEATURES
 df_intersections: gpd.geodataframe.GeoDataFrame = gpd.read_file("data.gdb", layer="NTWK_Intersections_20200424")
 
 
-###############################
-# LOAD ROAD INTERSECTION FEATURES
-
+##################################################################################################
+# SELECT SPECIFIC ROADS FOR WHICH TO PERFORM THE ANALYSIS SINCE THIS TAKES FLIPPING FOREVER TO RUN
 
 # take the ["ROAD"] number column from the database (which returns a pd.Series object) and call the unique() function on it which returns a NumPy.array object of unique values.
 # We can assume it is a normal python List
 # list_of_state_road_numbers: List[str] = df_state_roads["ROAD"].unique()
+
 # override above list of all roads with smaller list of roads.
 list_of_state_road_numbers = [
-	'H036',
-	"H574",
-	"H021",
-	"H001",
-	"H015",
-	"H016",
-	"H026",
-	"H005",
-	"H027",
-	"H052",
-	"H013",
-	"H002",
-	"H029"
+	# 'H036',  # Curtin Ave
+	# 'H030',  # Curtin Ave
+	# '1210072',  # Curtin Ave
+	# '1160001',  # Curtin Ave
+	# "H574",
+	# "H021",
+	# "H001",
+	# "H015",
+	# "H016",
+	# "H018",
+	# "H019",  # GEH Bypass
+	# "H026",
+	# "H005",
+	# "H027",
+	# "H052",
+	# "H013",
+	# "H002",
+	# "H029",
+	"H038"
 ]
-list_of_state_road_numbers = ['H036', "H016"]
+# list_of_state_road_numbers = ['H036', "H016"]
 
 
 def direction_of_node(row: gpd.GeoSeries, start_end: str = "START"):
@@ -160,9 +74,9 @@ def direction_of_node(row: gpd.GeoSeries, start_end: str = "START"):
 		return (b - a).direction()
 		
 	if start_end == "START":
-		a, b, c = map(Vector2, geom.coords[:3])  # first three verticies in line converted to vectors and assigned to a, b, c
+		a, b, c = map(Vector2, geom.coords[:3])  # first three vertices in line converted to vectors and assigned to a, b, c
 	elif start_end == "END":
-		a, b, c = map(Vector2, geom.coords[-3:])  # last three verticies in line converted to vectors and assigned to a, b, c
+		a, b, c = map(Vector2, geom.coords[-3:])  # last three vertices in line converted to vectors and assigned to a, b, c
 	else:
 		raise Exception("start_end parameter must have a value of 'START' or 'END'")
 	
@@ -185,14 +99,14 @@ for current_road_number in list_of_state_road_numbers:
 	print(f"{counter} of {counter_total} roads: {current_road_number}    {datetime.datetime.now()}")
 	counter += 1
 
-	# obtain a list of road segments which DISCLUDES the current_road we are considering.
+	# obtain a list of road segments which EXCLUDES the current_road we are considering.
 	# this is not used immediately but is important for later
-	all_roads_except_current_road:gpd.GeoDataFrame = df_all_roads[df_all_roads["ROAD"] != current_road_number]
+	all_roads_except_current_road: gpd.GeoDataFrame = df_all_roads[df_all_roads["ROAD"] != current_road_number]
 	
-	# filter the state roads dataframe to get all the segments/rows that make up the current_road that we are looking at
-	current_road_segments_L: gpd.GeoDataFrame = df_state_roads[(df_state_roads["ROAD"] == current_road_number) & (df_state_roads["CWY"] == "Left")]
-	current_road_segments_R: gpd.GeoDataFrame = df_state_roads[(df_state_roads["ROAD"] == current_road_number) & (df_state_roads["CWY"] == "Right")]
-	current_road_segments_S: gpd.GeoDataFrame = df_state_roads[(df_state_roads["ROAD"] == current_road_number) & (df_state_roads["CWY"] == "Single")]
+	# filter the state roads data frame to get all the segments/rows that make up the current_road that we are looking at
+	current_road_segments_L: gpd.GeoDataFrame = df_all_roads[(df_all_roads["ROAD"] == current_road_number) & (df_all_roads["CWY"] == "Left")]
+	current_road_segments_R: gpd.GeoDataFrame = df_all_roads[(df_all_roads["ROAD"] == current_road_number) & (df_all_roads["CWY"] == "Right")]
+	current_road_segments_S: gpd.GeoDataFrame = df_all_roads[(df_all_roads["ROAD"] == current_road_number) & (df_all_roads["CWY"] == "Single")]
 	
 	# from the above segments, extract the list of all nodes on the current road
 	# using set() instead of list() to automatically avoid duplicates
@@ -238,11 +152,11 @@ for current_road_number in list_of_state_road_numbers:
 	for current_road_cway, current_road_segments, current_intersection in compound_iterator_generator_1():
 		current_intersection_node_number = str(current_intersection["NODE_NAME"])
 		
-		segments_startfing_or_ending_at_current_node: pd.DataFrame = all_roads_except_current_road[
+		segments_starting_or_ending_at_current_node: pd.DataFrame = all_roads_except_current_road[
 			(all_roads_except_current_road["START_NODE_NO"] == current_intersection_node_number) |
 			(all_roads_except_current_road["END_NODE_NO"] == current_intersection_node_number)
 		]
-		intersecting_road_numbers.update(segments_startfing_or_ending_at_current_node["ROAD"].to_list())
+		intersecting_road_numbers.update(segments_starting_or_ending_at_current_node["ROAD"].to_list())
 	
 	print(f"    {current_road_number} intersects the following roads: {', '.join([str(x) for x in intersecting_road_numbers])}")
 	print("    Processing +Intersections and -Intersecting Roads:", end='')
@@ -287,7 +201,6 @@ for current_road_number in list_of_state_road_numbers:
 			if type(road_true_dist_at_element_ending_at_node) is not np.float64:
 				road_true_dist_first = "None"
 		
-		
 		# determine the average direction of the current road;
 		if direction_at_starting is not None and direction_at_ending is not None:
 			current_road_direction = gm.interpolate_angles(direction_at_starting, direction_at_ending, 0.5)
@@ -317,12 +230,10 @@ for current_road_number in list_of_state_road_numbers:
 			#  we skip all the way to the other end of the intersecting road and record whats there, missing all the intermediat intersections.
 			#  we could apply further smarts to only get the continuing roads we really want to know about; but thats very hardddd i think
 			
-			# first get all the segements of the intersecting road;
+			# first get all the segments of the intersecting road;
 			intersecting_road_segments = df_all_roads[df_all_roads["ROAD"] == intersecting_segment["ROAD"]]
 			
-			
-			
-			# find the node at the other side of the intersecing road be choosing the first or last node of the first or last segment respectively
+			# find the node at the other side of the intersecting road be choosing the first or last node of the first or last segment respectively
 			#  TODO: Note that we just grab the last row from the sorted list of 'intersecting road' segments, we dont pay attention to which carriageway of the intersecting road arrives at this node.
 			#   We just assume both L and R of the intersecting road finish at the same node. This works fine for ramps which are Single carriageway anyway.
 			#  also determine direction of intersecting road (increasing slk), and the direction away from the current road (from current_node outward);
@@ -345,8 +256,7 @@ for current_road_number in list_of_state_road_numbers:
 			if intersecting_road_direction is not None and current_road_direction is not None:
 				intersecting_road_relative_direction = gm.angle_difference(intersecting_road_direction_away, current_road_direction)
 			
-			
-			# then find all roads connected to this node; (dont include roads that are also primary connections to current_road
+			# then find all roads connected to this node; (don't include roads that are also primary connections to current_road)
 			other_road_segments = df_all_roads[df_all_roads["ROAD"] != intersecting_segment["ROAD"]]
 			road_segments_at_the_other_side_of_intersecting_road = other_road_segments[
 				((other_road_segments["START_NODE_NO"] == node_at_other_side_of_intersecting_road) |
