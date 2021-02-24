@@ -144,3 +144,15 @@ With some effort it could be reconstructed from this dataset<br> https://portal-
     - `NETWORK_ELEMENT`
     - `ROUTE_NE_ID`
     - `GEOLOC_STLength__`
+    
+## Mapping Example Outputs
+
+The output table can be mapped to obtain images shown below.
+
+Note:
+ - that the direction of the direction of the intersecting roads has been determined relative to the main road.
+ - The freeway ramps have been labelled with the name and road number of the continuing roads.
+
+![Wide view of mapped output](example_output/ramps_and_direction.png)
+
+![Detail view of mapped output](example_output/ramps_detail_view.png)
