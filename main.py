@@ -17,11 +17,9 @@ output: List[Dict[str, Any]] = []
 # LOAD ROAD LINE FEATURES
 df_all_roads: gpd.geodataframe.GeoDataFrame = gpd.read_file("data.gdb", layer="NTWK_IRIS_Road_Network_20200424")
 
-
 ###############################
 # LOAD ROAD INTERSECTION FEATURES
 df_intersections: gpd.geodataframe.GeoDataFrame = gpd.read_file("data.gdb", layer="NTWK_Intersections_20200424")
-
 
 ##################################################################################################
 # SELECT SPECIFIC ROADS FOR WHICH TO PERFORM THE ANALYSIS SINCE THIS TAKES FLIPPING FOREVER TO RUN
@@ -52,6 +50,8 @@ list_of_state_road_numbers = [
 	# "H029",
 	"H038"
 ]
+
+
 # list_of_state_road_numbers = ['H036', "H016"]
 
 
@@ -72,7 +72,7 @@ def direction_of_node(row: gpd.GeoSeries, start_end: str = "START"):
 	elif len(geom.coords) == 2:
 		a, b = map(Vector2, geom.coords)
 		return (b - a).direction()
-		
+	
 	if start_end == "START":
 		a, b, c = map(Vector2, geom.coords[:3])  # first three vertices in line converted to vectors and assigned to a, b, c
 	elif start_end == "END":
@@ -86,7 +86,7 @@ def direction_of_node(row: gpd.GeoSeries, start_end: str = "START"):
 	weight_bc = bc.magnitude()
 	weight_sum = weight_ab + weight_bc
 	
-	return gm.interpolate_angles(ab.direction(), bc.direction(), weight_bc/weight_sum)
+	return gm.interpolate_angles(ab.direction(), bc.direction(), weight_bc / weight_sum)
 
 
 # subsequent opperations may rely on this sort order: # TODO: not sure if they still do rely on this sort order..
@@ -98,7 +98,7 @@ print(datetime.datetime.now())
 for current_road_number in list_of_state_road_numbers:
 	print(f"{counter} of {counter_total} roads: {current_road_number}    {datetime.datetime.now()}")
 	counter += 1
-
+	
 	# obtain a list of road segments which EXCLUDES the current_road we are considering.
 	# this is not used immediately but is important for later
 	all_roads_except_current_road: gpd.GeoDataFrame = df_all_roads[df_all_roads["ROAD"] != current_road_number]
@@ -116,17 +116,17 @@ for current_road_number in list_of_state_road_numbers:
 	for index, intersecting_segment in current_road_segments_L.iterrows():
 		current_road_nodes_L.add(intersecting_segment["END_NODE_NO"])
 		current_road_nodes_L.add(intersecting_segment["START_NODE_NO"])
-		
+	
 	for index, intersecting_segment in current_road_segments_R.iterrows():
 		current_road_nodes_R.add(intersecting_segment["END_NODE_NO"])
 		current_road_nodes_R.add(intersecting_segment["START_NODE_NO"])
-		
+	
 	for index, intersecting_segment in current_road_segments_S.iterrows():
 		current_road_nodes_S.add(intersecting_segment["END_NODE_NO"])
 		current_road_nodes_S.add(intersecting_segment["START_NODE_NO"])
-		
+	
 	print(f"    {current_road_number} has the following number of nodes:           L {len(current_road_nodes_L)}, R {len(current_road_nodes_R)}, S {len(current_road_nodes_S)}")
-		
+	
 	# not all of the nodes we just collected from the current_road correspond to intersections
 	# obtain a list of intersections which have matching node numbers; to do this we use the Pandas.Series.isin() function which tests if each value in a column is a member of a set
 	# for some reason the "NODE_NAME" of an intersection is actually its number
@@ -135,8 +135,9 @@ for current_road_number in list_of_state_road_numbers:
 	intersections_on_road_S: gpd.GeoDataFrame = df_intersections[df_intersections["NODE_NAME"].astype(str).isin(current_road_nodes_S)]
 	print(f"    Of these, the following number are intersections: L {len(intersections_on_road_L.index)}, R {len(intersections_on_road_R.index)}, S {len(intersections_on_road_S.index)}")
 	
-	# TODO: obtain sneaky nodes that are also secret intersections but dont share a node number with the current_road
-	#  this is a massively expensive opperation... but only has to be done once i guess :/
+	
+	# TODO: There are some sneaky nodes that are also secretly intersections with the current_road but do not share a node number with the current_road
+	#  this is a massively expensive operation... but only has to be done once i guess :/
 	
 	# this function allows us to simplify the next for loops by executing three consecutive for loops in the background where each loop goes through a different dataframe
 	def compound_iterator_generator_1() -> (str, gpd.GeoDataFrame, gpd.GeoSeries):
@@ -146,7 +147,8 @@ for current_road_number in list_of_state_road_numbers:
 			yield "R", current_road_segments_R, l_current_intersection
 		for index, l_current_intersection in intersections_on_road_S.iterrows():
 			yield "S", current_road_segments_S, l_current_intersection
-		
+	
+	
 	# compile list of road numbers of all roads intersecting current_road... we will prevent these from being part of the "continuing_roads" output column
 	intersecting_road_numbers = set()
 	for current_road_cway, current_road_segments, current_intersection in compound_iterator_generator_1():
@@ -181,18 +183,29 @@ for current_road_number in list_of_state_road_numbers:
 		road_network_element_ending_at_node = None
 		road_true_dist_at_element_starting_from_node = ""
 		road_true_dist_at_element_ending_at_node = ""
+		road_slk_at_element_starting_from_node = ""
+		road_slk_at_element_ending_at_node = ""
 		
 		direction_at_starting = None
 		direction_at_ending = None
 		
+		# TODO: i assume that we have guaranteed that current_road_segments_starting_at_node and current_road_segments_ending_at_node contain either 0 or 1 records
+		#  since we are looping through each carriageway in turn. I have added the following assert statements to guarantee this fact
+		assert len(current_road_segments_starting_at_node.index) in {0, 1}
+		assert len(current_road_segments_ending_at_node.index) in {0, 1}
 		if not current_road_segments_starting_at_node.empty:
 			road_network_element_starting_at_node = current_road_segments_starting_at_node.iloc[0]["NETWORK_ELEMENT"]
-			road_true_dist_at_element_starting_from_node = current_road_segments_starting_at_node.iloc[0]["START_TRUE_DIST"]  # TODO: assumes true may have gap or overlap at node
+			road_true_dist_at_element_starting_from_node = current_road_segments_starting_at_node.iloc[0]["START_TRUE_DIST"]
+			road_slk_at_element_starting_from_node = current_road_segments_starting_at_node.iloc[0]["START_SLK"]
 			direction_at_starting = direction_of_node(current_road_segments_starting_at_node.iloc[0], "START")
 		if not current_road_segments_ending_at_node.empty:
 			road_network_element_ending_at_node = current_road_segments_ending_at_node.iloc[0]["NETWORK_ELEMENT"]
-			road_true_dist_at_element_ending_at_node = current_road_segments_ending_at_node.iloc[0]["END_TRUE_DIST"]  # TODO: assumes true may have gap or overlap at node
-			direction_at_ending = direction_of_node(current_road_segments_ending_at_node.iloc[0], "START")
+			road_true_dist_at_element_ending_at_node = current_road_segments_ending_at_node.iloc[0]["END_TRUE_DIST"]
+			road_slk_at_element_ending_at_node = current_road_segments_ending_at_node.iloc[0]["END_SLK"]
+			# TODO: I have corrected what i believe to be an error by changing the line below; The old line is commented out with the direction found at the "START"
+			#  the new line finds the direction at "END".
+			# direction_at_ending = direction_of_node(current_road_segments_ending_at_node.iloc[0], "START")
+			direction_at_ending = direction_of_node(current_road_segments_ending_at_node.iloc[0], "END")
 		
 		# sanitise road_true_dist_first
 		road_true_dist_first = road_true_dist_at_element_starting_from_node
@@ -200,6 +213,13 @@ for current_road_number in list_of_state_road_numbers:
 			road_true_dist_first = road_true_dist_at_element_ending_at_node
 			if type(road_true_dist_at_element_ending_at_node) is not np.float64:
 				road_true_dist_first = "None"
+		
+		# sanitise road_slk_first
+		road_slk_first = road_slk_at_element_starting_from_node
+		if type(road_slk_at_element_starting_from_node) is not np.float64:
+			road_slk_first = road_slk_at_element_ending_at_node
+			if type(road_slk_at_element_ending_at_node) is not np.float64:
+				road_slk_first = "None"
 		
 		# determine the average direction of the current road;
 		if direction_at_starting is not None and direction_at_ending is not None:
@@ -214,13 +234,15 @@ for current_road_number in list_of_state_road_numbers:
 		if len(segments_ending_at_current_node.index) + len(segments_starting_from_current_node.index) == 0:
 			print("0", end='')
 			orphaned_intersections.append(current_intersection.to_list())
-			
+		
+		
 		def compound_iterator_generator_3():
 			for index, intersecting_segment in segments_starting_from_current_node.iterrows():
 				yield intersecting_segment, "START"
 			for index, intersecting_segment in segments_ending_at_current_node.iterrows():
 				yield intersecting_segment, "END"
-				
+		
+		
 		for intersecting_segment, startend in compound_iterator_generator_3():
 			print("-", end='')
 			# find the node at the other end of the intersecting road;
@@ -260,7 +282,7 @@ for current_road_number in list_of_state_road_numbers:
 			other_road_segments = df_all_roads[df_all_roads["ROAD"] != intersecting_segment["ROAD"]]
 			road_segments_at_the_other_side_of_intersecting_road = other_road_segments[
 				((other_road_segments["START_NODE_NO"] == node_at_other_side_of_intersecting_road) |
-				(other_road_segments["END_NODE_NO"] == node_at_other_side_of_intersecting_road)) &
+				 (other_road_segments["END_NODE_NO"] == node_at_other_side_of_intersecting_road)) &
 				~(other_road_segments["ROAD"].isin(intersecting_road_numbers))
 			]
 			
@@ -271,7 +293,7 @@ for current_road_number in list_of_state_road_numbers:
 				for index, other_road_segment in road_segments_at_the_other_side_of_intersecting_road.iterrows():
 					list_of_continuing_roads.add(f"{other_road_segment['ROAD']} -- {other_road_segment['ROAD_NAME']}")
 				list_of_continuing_roads = " ; ".join(list_of_continuing_roads)
-				
+			
 			# Make some measurements of the intersecting road
 			# TODO: Note that we are measuring the entire road, both carriageways. Could be improeved by starting from intersecting segment and paying attention to the carriageway. i think both these measures might a bit pointless.
 			length_of_intersecting_road = float(intersecting_road_segments.iloc[-1]["END_TRUE_DIST"]) - float(intersecting_road_segments.iloc[0]["START_TRUE_DIST"])
@@ -289,7 +311,7 @@ for current_road_number in list_of_state_road_numbers:
 					intersecting_road_looks_like_ramp = "OFF RAMP"
 				else:
 					intersecting_road_looks_like_ramp = "ON RAMP"
-				
+			
 			# guess
 			
 			# finally; populate our output table with everything we know;
@@ -301,24 +323,27 @@ for current_road_number in list_of_state_road_numbers:
 				"road_network_element_ending_at_node":          road_network_element_ending_at_node,
 				"road_true_dist_at_element_starting_from_node": road_true_dist_at_element_starting_from_node,
 				"road_true_dist_at_element_ending_at_node":     road_true_dist_at_element_ending_at_node,
-				"road_true_dist_first":							road_true_dist_first,
-				"road_direction_deg":							gm.radians_to_degrees(current_road_direction),
-				"intersecting_direction":						gm.radians_to_degrees(intersecting_road_direction),
-				"intersecting_road_away_direction":				gm.radians_to_degrees(intersecting_road_direction_away),
-				"intersecting_road_relative_direction":			gm.radians_to_degrees(intersecting_road_relative_direction),
-				"intersecting_road_relative_LR":				"L" if intersecting_road_relative_direction < 0 else "R",
+				"road_true_dist_first":                         road_true_dist_first,
+				"road_slk_at_element_starting_from_node":       road_slk_at_element_starting_from_node,
+				"road_slk_at_element_ending_at_node":           road_slk_at_element_ending_at_node,
+				"road_slk_first":                               road_slk_first,
+				"road_direction_deg":                           gm.radians_to_degrees(current_road_direction),
+				"intersecting_direction":                       gm.radians_to_degrees(intersecting_road_direction),
+				"intersecting_road_away_direction":             gm.radians_to_degrees(intersecting_road_direction_away),
+				"intersecting_road_relative_direction":         gm.radians_to_degrees(intersecting_road_relative_direction),
+				"intersecting_road_relative_LR":                "L" if intersecting_road_relative_direction < 0 else "R",
 				"intersecting_network_element":                 intersecting_segment["NETWORK_ELEMENT"],
 				"intersecting_road_cwy":                        intersecting_segment["CWY"][0],
 				"intersecting_no":                              intersecting_segment["ROAD"],
 				"intersecting_name":                            intersecting_segment["ROAD_NAME"],
 				"intersecting_road_length":                     length_of_intersecting_road,
 				"intersecting_road_segments":                   number_of_intersecting_road_segments,
-				"intersecting_road_is_ramp":                     intersecting_road_looks_like_ramp,
+				"intersecting_road_is_ramp":                    intersecting_road_looks_like_ramp,
 				"intersecting_road_extremity_at_node":          startend,
 				"continuing_node":                              node_at_other_side_of_intersecting_road,
 				"continuing_roads":                             list_of_continuing_roads,
-				"lng":											node_lng,
-				"lat":											node_lat
+				"lng":                                          node_lng,
+				"lat":                                          node_lat
 			})
 		print(" ", end='')
 	print(" ")
@@ -326,8 +351,7 @@ for current_road_number in list_of_state_road_numbers:
 	if orphaned_intersections:
 		print("    Nodes that are intersections but not connected to other roads: ")
 		for index, item in enumerate(orphaned_intersections):
-			print("        "+str(item))
-
+			print("        " + str(item))
 
 print("\r\n======= PHASE 2 ===========")
 print("converting output to dataframe")
@@ -340,6 +364,7 @@ def make_agg_join(joinstr: str = ''):
 	def inner_agg_join(series: pd.Series):
 		s1 = series.fillna('')
 		return joinstr.join(s1[s1 != ""].to_list())
+	
 	return inner_agg_join
 
 
@@ -352,6 +377,7 @@ def make_aggregator_with_default(groupby, agg_dict: dict, default='first'):
 		dfr = dfg.agg(agg_dict_inner)
 		dfr = dfr.reset_index(drop=True)
 		return dfr
+	
 	return inner
 
 
@@ -360,13 +386,14 @@ df = df.groupby("node").apply(
 	make_aggregator_with_default(
 		groupby="intersecting_network_element",
 		agg_dict={
-			"road_cwy": ''.join,
+			"road_cwy":                              ''.join,
 			"road_network_element_starting_at_node": make_agg_join(";"),
-			"road_network_element_ending_at_node": make_agg_join(";"),
+			"road_network_element_ending_at_node":   make_agg_join(";"),
 		},
 		default='first'
 	)
 ).reset_index(drop=True)
+
 print("Sorting by intersecting_road_cwy to make the next grouping happen in a nice order")
 print("Grouping by node then by intersecting_no then by intersecting_road_extremity_at_node: Then selecting the first of each column but joining the valies of intersecting_road_cwy")
 df = df.sort_values("intersecting_road_cwy", ascending=True)
@@ -378,8 +405,8 @@ df = df.groupby("node").apply(
 		],
 		agg_dict={
 			"intersecting_road_cwy": ''.join,
-			#"intersecting_network_element": ';'.join,
-			#"continuing_node": lambda item: ';'.join(item.astype(str))
+			# "intersecting_network_element": ';'.join,
+			# "continuing_node": lambda item: ';'.join(item.astype(str))
 		},
 		default='first'
 	)
