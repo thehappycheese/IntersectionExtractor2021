@@ -10,7 +10,7 @@ Additional information is extracted about the direction of intersection legs rel
 The output data is intended to be filtered road-by-road; each intersection is duplicated in the output data for each road that meets at that intersection.
 Filter by `road_no="H001"` and expect a list of **all** intersections along Albany Highway.
 Filter Leach Highway `road_no="H012"` and get all intersections for Leach Highway.
-Both extracts would include the common intersection between Albany Highway and Leach Highway but from a different point of view.
+Both filters would include the common intersection between Albany Highway and Leach Highway but from a different point of view.
 
 The Road that is used to filter the output data is referred to as the "primary road". Other roads are called "intersecting roads".
 
