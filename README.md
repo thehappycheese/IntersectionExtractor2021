@@ -14,6 +14,20 @@ Both extracts would include the common intersection between Albany Highway and L
 
 The Road that is used to filter the output data is referred to as the "primary road". Other roads are called "intersecting roads".
 
+## Input List of File Names
+
+This script can either work using a csv file `./list_of_road_numbers_to_process.csv` or on all roads in the network (Modification to main.py required to enable).
+
+The csv file should look like this
+
+| enabled | road    | comment    |
+| ------- | ------- | ---------- |
+| 0       | H036    | Curtin Ave |
+| 0       | H030    | Curtin Ave |
+| 1       | 1210072 | Curtin Ave |
+| ...     | ...     | ...        |
+
+
 
 ## Define some types before explaining the algorithm
 ```python
