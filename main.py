@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 import pandas as pd
 import geopandas as gpd
 import shapely.geometry.multilinestring
@@ -7,7 +7,7 @@ import datetime
 import re
 import Geometry as gm
 from Geometry import Vector2
-
+import pandas as pd
 import numpy as np
 
 # container for output of our algorithm
@@ -15,11 +15,11 @@ output: List[Dict[str, Any]] = []
 
 ###############################
 # LOAD ROAD LINE FEATURES
-df_all_roads: gpd.geodataframe.GeoDataFrame = gpd.read_file("data.gdb", layer="NTWK_IRIS_Road_Network_20200424")
+df_all_roads: gpd.geodataframe.GeoDataFrame = gpd.read_file("data.gdb", layer="NTWK_IRIS_Road_Network_20210305")
 
 ###############################
 # LOAD ROAD INTERSECTION FEATURES
-df_intersections: gpd.geodataframe.GeoDataFrame = gpd.read_file("data.gdb", layer="NTWK_Intersections_20200424")
+df_intersections: gpd.geodataframe.GeoDataFrame = gpd.read_file("data.gdb", layer="NTWK_Intersections_20210305")
 
 ##################################################################################################
 # SELECT SPECIFIC ROADS FOR WHICH TO PERFORM THE ANALYSIS SINCE THIS TAKES FLIPPING FOREVER TO RUN
@@ -29,30 +29,9 @@ df_intersections: gpd.geodataframe.GeoDataFrame = gpd.read_file("data.gdb", laye
 # list_of_state_road_numbers: List[str] = df_state_roads["ROAD"].unique()
 
 # override above list of all roads with smaller list of roads.
-list_of_state_road_numbers = [
-	# 'H036',  # Curtin Ave
-	# 'H030',  # Curtin Ave
-	# '1210072',  # Curtin Ave
-	# '1160001',  # Curtin Ave
-	# "H574",
-	# "H021",
-	# "H001",
-	# "H015",
-	# "H016",
-	# "H018",
-	# "H019",  # GEH Bypass
-	# "H026",
-	# "H005",
-	# "H027",
-	# "H052",
-	# "H013",
-	# "H002",
-	# "H029",
-	"H038"
-]
-
-
-# list_of_state_road_numbers = ['H036', "H016"]
+list_of_state_road_numbers = pd.read_csv("list_of_road_numbers_to_process.csv")
+list_of_state_road_numbers = list_of_state_road_numbers[list_of_state_road_numbers["enabled"]==1]
+list_of_state_road_numbers = list_of_state_road_numbers["road"].to_list()
 
 
 def direction_of_node(row: gpd.GeoSeries, start_end: str = "START"):
@@ -140,7 +119,7 @@ for current_road_number in list_of_state_road_numbers:
 	#  this is a massively expensive operation... but only has to be done once i guess :/
 	
 	# this function allows us to simplify the next for loops by executing three consecutive for loops in the background where each loop goes through a different dataframe
-	def compound_iterator_generator_1() -> (str, gpd.GeoDataFrame, gpd.GeoSeries):
+	def compound_iterator_generator_1() -> Tuple[str, gpd.GeoDataFrame, gpd.GeoSeries]:
 		for index, l_current_intersection in intersections_on_road_L.iterrows():
 			yield "L", current_road_segments_L, l_current_intersection
 		for index, l_current_intersection in intersections_on_road_R.iterrows():

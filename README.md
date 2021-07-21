@@ -7,10 +7,12 @@ It intended to supplement the dataset available here: https://portal-mainroads.o
 
 Additional information is extracted about the direction of intersection legs relative to each other, and the connectivity of intersecting roads with the left and right carriageway of the primary road.
 
-The output data is intended to be filtered road-by-road.
-If we filter the output data by `road_no="H001"` we can expect a list of all intersections on Albany Highway.
-If we do the same for Leach Highway `road_no="H012"` then we would also get all intersections for Leach Highway.
+The output data is intended to be filtered road-by-road; each intersection is duplicated in the output data for each road that meets at that intersection.
+Filter by `road_no="H001"` and expect a list of **all** intersections along Albany Highway.
+Filter Leach Highway `road_no="H012"` and get all intersections for Leach Highway.
 Both extracts would include the common intersection between Albany Highway and Leach Highway but from a different point of view.
+
+The Road that is used to filter the output data is referred to as the "primary road". Other roads are called "intersecting roads".
 
 
 ## Define some types before explaining the algorithm
@@ -29,7 +31,7 @@ road_row: GeoSeries
 Note that `row` represents a record from `road_network`
 
 Each `row` represents a segment of a road, from some `'START_SLK'` to `'END_SLK'`
-Each row has an `'START_NODE_NO'` and an `'END_NODE_NO'`
+Each row has n `'START_NODE_NO'` and an `'END_NODE_NO'`
 
 ## Explaining the algorithm:
 - For each `road` in `unique(road_network['ROAD'])`
@@ -110,7 +112,7 @@ With some effort it could be reconstructed from this dataset<br> https://portal-
 
 `data.gdb` includes the following data extracts:
 
-- `NTWK_Intersections_20200424`<br>
+- `NTWK_Intersections_20210305`<br>
   (one point feature per row, per intersection)
     - `OBJECTID`
     - `NODE_NAME` 
@@ -119,7 +121,7 @@ With some effort it could be reconstructed from this dataset<br> https://portal-
     - `NO_NODE_ID`
 
 
-- `NTWK_IRIS_Road_Network_20200424`<br>
+- `NTWK_IRIS_Road_Network_20210305`<br>
   (each road is in multiple rows, where each row is a MultiLineString feature.
   In this dataset all MultiLineString features are always composed of a single LineString object.)
     - `OBJECTID`
