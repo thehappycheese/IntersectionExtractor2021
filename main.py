@@ -26,12 +26,12 @@ df_intersections: gpd.geodataframe.GeoDataFrame = gpd.read_file("data.gdb", laye
 
 # take the ["ROAD"] number column from the database (which returns a pd.Series object) and call the unique() function on it which returns a NumPy.array object of unique values.
 # We can assume it is a normal python List
-# list_of_state_road_numbers: List[str] = df_state_roads["ROAD"].unique()
+list_of_state_road_numbers: List[str] = list(df_all_roads.loc[df_all_roads["NETWORK_TYPE"]=="State Road", "ROAD"].unique())
 
 # override above list of all roads with smaller list of roads.
-list_of_state_road_numbers = pd.read_csv("list_of_road_numbers_to_process.csv")
-list_of_state_road_numbers = list_of_state_road_numbers[list_of_state_road_numbers["enabled"]==1]
-list_of_state_road_numbers = list_of_state_road_numbers["road"].to_list()
+# list_of_state_road_numbers = pd.read_csv("list_of_road_numbers_to_process.csv")
+# list_of_state_road_numbers = list_of_state_road_numbers[list_of_state_road_numbers["enabled"]==1]
+# list_of_state_road_numbers = list_of_state_road_numbers["road"].to_list()
 
 
 def direction_of_node(row: gpd.GeoSeries, start_end: str = "START"):
@@ -68,7 +68,8 @@ def direction_of_node(row: gpd.GeoSeries, start_end: str = "START"):
 	return gm.interpolate_angles(ab.direction(), bc.direction(), weight_bc / weight_sum)
 
 
-# subsequent opperations may rely on this sort order: # TODO: not sure if they still do rely on this sort order..
+# subsequent operations may rely on this sort order:
+# TODO: not sure if they still do rely on this sort order..
 df_all_roads.sort_values(["ROAD", "START_TRUE_DIST"], ascending=True, inplace=True)
 
 counter_total: int = len(list_of_state_road_numbers)
@@ -83,7 +84,12 @@ for current_road_number in list_of_state_road_numbers:
 	all_roads_except_current_road: gpd.GeoDataFrame = df_all_roads[df_all_roads["ROAD"] != current_road_number]
 	
 	# filter the state roads data frame to get all the segments/rows that make up the current_road that we are looking at
-	current_road_segments_L: gpd.GeoDataFrame = df_all_roads[(df_all_roads["ROAD"] == current_road_number) & (df_all_roads["CWY"] == "Left")]
+	current_road_segments_L: gpd.GeoDataFrame = df_all_roads[
+		  (df_all_roads["ROAD"] == current_road_number)
+		& (df_all_roads["CWY"]  == "Left")
+		#& (df_all_roads["slk_from"] )
+		#& (df_all_roads["slk_to"] )
+	]
 	current_road_segments_R: gpd.GeoDataFrame = df_all_roads[(df_all_roads["ROAD"] == current_road_number) & (df_all_roads["CWY"] == "Right")]
 	current_road_segments_S: gpd.GeoDataFrame = df_all_roads[(df_all_roads["ROAD"] == current_road_number) & (df_all_roads["CWY"] == "Single")]
 	
@@ -274,7 +280,7 @@ for current_road_number in list_of_state_road_numbers:
 				list_of_continuing_roads = " ; ".join(list_of_continuing_roads)
 			
 			# Make some measurements of the intersecting road
-			# TODO: Note that we are measuring the entire road, both carriageways. Could be improeved by starting from intersecting segment and paying attention to the carriageway. i think both these measures might a bit pointless.
+			# TODO: Note that we are measuring the entire road, both carriageways. Could be improved by starting from intersecting segment and paying attention to the carriageway. i think both these measures might a bit pointless.
 			length_of_intersecting_road = float(intersecting_road_segments.iloc[-1]["END_TRUE_DIST"]) - float(intersecting_road_segments.iloc[0]["START_TRUE_DIST"])
 			number_of_intersecting_road_segments = len(intersecting_road_segments.index)
 			
@@ -300,9 +306,11 @@ for current_road_number in list_of_state_road_numbers:
 				"road_cwy":                                     current_road_cway,
 				"road_network_element_starting_at_node":        road_network_element_starting_at_node,
 				"road_network_element_ending_at_node":          road_network_element_ending_at_node,
+
 				"road_true_dist_at_element_starting_from_node": road_true_dist_at_element_starting_from_node,
 				"road_true_dist_at_element_ending_at_node":     road_true_dist_at_element_ending_at_node,
 				"road_true_dist_first":                         road_true_dist_first,
+				
 				"road_slk_at_element_starting_from_node":       road_slk_at_element_starting_from_node,
 				"road_slk_at_element_ending_at_node":           road_slk_at_element_ending_at_node,
 				"road_slk_first":                               road_slk_first,
@@ -360,7 +368,7 @@ def make_aggregator_with_default(groupby, agg_dict: dict, default='first'):
 	return inner
 
 
-print("Grouping by node and consolidating by grouping by intersecting_network_element, selecting the first of each column but joining the valies of road_cwy, road_network_element_starting_at_node and road_network_element_ending_at_node")
+print("Grouping by node and consolidating by grouping by intersecting_network_element, selecting the first of each column but joining the values of road_cwy, road_network_element_starting_at_node and road_network_element_ending_at_node")
 df = df.groupby("node").apply(
 	make_aggregator_with_default(
 		groupby="intersecting_network_element",
@@ -374,7 +382,7 @@ df = df.groupby("node").apply(
 ).reset_index(drop=True)
 
 print("Sorting by intersecting_road_cwy to make the next grouping happen in a nice order")
-print("Grouping by node then by intersecting_no then by intersecting_road_extremity_at_node: Then selecting the first of each column but joining the valies of intersecting_road_cwy")
+print("Grouping by node then by intersecting_no then by intersecting_road_extremity_at_node: Then selecting the first of each column but joining the values of intersecting_road_cwy")
 df = df.sort_values("intersecting_road_cwy", ascending=True)
 df = df.groupby("node").apply(
 	make_aggregator_with_default(
